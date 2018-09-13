@@ -1,7 +1,9 @@
 package com.example.azri.smartmonitorv2;
 
 import android.app.ActionBar;
+import android.content.SharedPreferences;
 import android.os.Bundle;
+import android.preference.PreferenceManager;
 import android.support.v7.app.AppCompatActivity;
 import android.text.method.ScrollingMovementMethod;
 import android.util.Log;
@@ -15,8 +17,15 @@ import com.google.firebase.database.DatabaseReference;
 import com.google.firebase.database.FirebaseDatabase;
 import com.google.firebase.database.ValueEventListener;
 
+import java.io.IOException;
+import java.security.KeyStore;
+import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
+import java.security.cert.CertificateException;
+import java.util.Arrays;
 import java.util.Objects;
+
+import javax.crypto.SecretKey;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -33,8 +42,10 @@ public class MainActivity extends AppCompatActivity {
 
     dataCrypt pushData = new dataCrypt();
     SecretKeyGenerator seckeygen = new SecretKeyGenerator();
+    KeyStore ks;
+    SecretKey loadkey;
 
-    public MainActivity() throws NoSuchAlgorithmException {
+    public MainActivity(){
     }
     //User user = new User();
 
@@ -51,18 +62,39 @@ public class MainActivity extends AppCompatActivity {
         Button decryptIt = findViewById(R.id.decryptIt);
         //setSupportActionBar((Toolbar) findViewById(R.id.toolbar));
 
-        //generate Secret Key
-        //for testing purpose
-        /*String seckey = "accel";
-        pushData.fetchSecretKey(seckey);*/
+        //generate Secret Key - check if key exists or not (if not, generate a new one)
 
-        //for real purpose
         try {
-            String seckey = seckeygen.generateKey();
-            pushData.fetchSecretKey(seckey);
-        } catch (NoSuchAlgorithmException e) {
+            //Get KeyStore
+            ks = KeyStore.getInstance(KeyStore.getDefaultType());
+
+            SharedPreferences wmbPreference = PreferenceManager.getDefaultSharedPreferences(this);
+            boolean isFirstRun = wmbPreference.getBoolean("FIRSTRUN", true);
+
+            //check if this the first time this app is launched in the entire lifetime
+            if(isFirstRun) {
+                SharedPreferences.Editor editor = wmbPreference.edit();
+                editor.putBoolean("FIRSTRUN", false); //if first run, then we change the flag to false
+                editor.commit();
+
+                try {
+                    ks.load(null, seckeygen.password);
+                } catch (IOException | NoSuchAlgorithmException | CertificateException e) {
+                    e.printStackTrace();
+                }
+                seckeygen.GenerateKey(ks, this); //generate key for the first time
+            }
+
+            //if not first time, load the existing key
+            else {
+                loadkey = seckeygen.LoadKey(ks, this);
+            }
+
+        } catch (KeyStoreException e) {
             e.printStackTrace();
         }
+
+        pushData.fetchSecretKey(Arrays.toString(loadkey.getEncoded()));
 
         decryptedUsername.setMovementMethod(new ScrollingMovementMethod());
         decryptedPassword.setMovementMethod(new ScrollingMovementMethod());
@@ -79,7 +111,6 @@ public class MainActivity extends AppCompatActivity {
         sendIt.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-
 
                 str_plainUsername = encryptedUsername.getText().toString();
                 str_plainPassword = encryptedPassword.getText().toString();
@@ -135,4 +166,5 @@ public class MainActivity extends AppCompatActivity {
             }
         });
     }
+
 }
